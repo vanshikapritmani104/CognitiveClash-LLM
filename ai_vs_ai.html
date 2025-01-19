@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block title %}AI vs AI Debate{% endblock %}
+
+{% block extra_head %}
+<style>
+    .argument {
+        background-color: #f8f8f8;
+        border-left: 4px solid #2D2926;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .team-a {
+        border-left-color: #3498db;
+    }
+    .team-b {
+        border-left-color: #e74c3c;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="debate-card p-8">
+    <h1 class="text-3xl font-bold text-center text-[#2D2926] mb-6">AI vs AI Debate</h1>
+    <h2 class="text-xl font-semibold text-center text-[#2D2926] mb-4">Topic: {{ debate_topic }}</h2>
+
+    <div id="debate-container" class="space-y-4 mb-8">
+        <!-- Arguments will be dynamically added here -->
+    </div>
+
+    <div id="summary-container" class="hidden">
+        <h3 class="text-xl font-semibold text-[#2D2926] mb-2">Debate Summary</h3>
+        <div id="summary-content" class="bg-white p-4 rounded-lg shadow"></div>
+    </div>
+
+    <button id="start-debate" class="btn-debate w-full mt-4 px-4 py-3 border-2 border-[#2D2926] shadow-sm text-base font-medium rounded-lg text-[#2D2926] bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2D2926]">
+        Start Debate
+    </button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const debateContainer = document.getElementById('debate-container');
+    const summaryContainer = document.getElementById('summary-container');
+    const summaryContent = document.getElementById('summary-content');
+    const startDebateButton = document.getElementById('start-debate');
+
+    let turn = 0;
+    const maxTurns = 6;
+
+    startDebateButton.addEventListener('click', runDebate);
+
+    async function runDebate() {
+        startDebateButton.disabled = true;
+        startDebateButton.textContent = 'Debate in Progress...';
+
+        while (turn < maxTurns) {
+            const team = turn % 2 === 0 ? 'A' : 'B';
+            const stance = team === 'A' ? 'in favor of' : 'against';
+
+            const response = await fetch('/api/generate_argument/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    prompt: '{{ debate_topic }}',
+                    stance: stance,
+                    turn: turn
+                })
+            });
+
+            const data = await response.json();
+            const argument = data.argument;
+
+            const argumentElement = document.createElement('div');
+            argumentElement.className = `argument team-${team.toLowerCase()}`;
+            argumentElement.innerHTML = `<strong>AI Team ${team}:</strong> ${argument}`;
+            debateContainer.appendChild(argumentElement);
+
+            turn++;
+        }
+
+        // Generate summary
+        const summaryResponse = await fetch('/api/generate_summary/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                prompt: '{{ debate_topic }}',
+                debate_transcript: debateContainer.innerText
+            })
+        });
+
+        const summaryData = await summaryResponse.json();
+        summaryContent.innerHTML = summaryData.summary;
+        summaryContainer.classList.remove('hidden');
+
+        startDebateButton.textContent = 'Debate Completed';
+    }
+</script>
+{% endblock %}

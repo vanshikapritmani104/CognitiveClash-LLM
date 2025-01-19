@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block title %}AI vs Human Debate{% endblock %}
+
+{% block extra_head %}
+<style>
+    .argument {
+        background-color: #f8f8f8;
+        border-left: 4px solid #2D2926;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .team-a {
+        border-left-color: #3498db;
+    }
+    .team-b {
+        border-left-color: #e74c3c;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="debate-card p-8">
+    <h1 class="text-3xl font-bold text-center text-[#2D2926] mb-6">AI vs Human Debate</h1>
+    <h2 class="text-xl font-semibold text-center text-[#2D2926] mb-4">Topic: {{ debate_topic }}</h2>
+
+    <div id="debate-container" class="space-y-4 mb-8">
+        <!-- Arguments will be dynamically added here -->
+    </div>
+
+    <div id="human-input" class="mb-4">
+        <textarea id="human-argument" rows="4" class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none" placeholder="Enter your argument..."></textarea>
+        <button id="submit-argument" class="btn-debate mt-2 px-4 py-2 border-2 border-[#2D2926] shadow-sm text-base font-medium rounded-lg text-[#2D2926] bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2D2926]">
+            Submit Argument
+        </button>
+    </div>
+
+    <div id="summary-container" class="hidden">
+        <h3 class="text-xl font-semibold text-[#2D2926] mb-2">Debate Summary</h3>
+        <div id="summary-content" class="bg-white p-4 rounded-lg shadow"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const debateContainer = document.getElementById('debate-container');
+    const humanInput = document.getElementById('human-input');
+    const humanArgument = document.getElementById('human-argument');
+    const submitArgumentButton = document.getElementById('submit-argument');
+    const summaryContainer = document.getElementById('summary-container');
+    const summaryContent = document.getElementById('summary-content');
+
+    let turn = 0;
+    const maxTurns = 6;
+    const humanTeam = '{{ human_team }}';
+
+    submitArgumentButton.addEventListener('click', submitHumanArgument);
+
+    async function submitHumanArgument() {
+        const argument = humanArgument.value.trim();
+        if (argument) {
+            const team = turn % 2 === 0 ? 'A' : 'B';
+            addArgumentToDebate(team, argument, true);
+            humanArgument.value = '';
+            turn++;
+            if (turn < maxTurns) {
+                await generateAIArgument();
+            } else {
+                await generateSummary();
+            }
+        }
+    }
+
+    async function generateAIArgument() {
+        const team = turn % 2 === 0 ? 'A' : 'B';
+        const stance = team === 'A' ? 'in favor of' : 'against';
+
+        const response = await fetch('/api/generate_argument/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                prompt: '{{ debate_topic }}',
+                stance: stance,
+                turn: turn,
+                opponent_argument: debateContainer.lastElementChild.innerText
+            })
+        });
+
+        const data = await response.json();
+        addArgumentToDebate(team, data.argument, false);
+        turn++;
+
+        if (turn >= maxTurns) {
+            await generateSummary();
+        }
+    }
+
+    function addArgumentToDebate(team, argument, isHuman) {
+        const argumentElement = document.createElement('div');
+        argumentElement.className = `argument team-${team.toLowerCase()}`;
+        argumentElement.innerHTML = `<strong>${isHuman ? 'Human' : 'AI'} Team ${team}:</strong> ${argument}`;
+        debateContainer.appendChild(argumentElement);
+    }
+
+    async function generateSummary() {
+        humanInput.style.display = 'none';
+        
+        const summaryResponse = await fetch('/api/generate_summary/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                prompt: '{{ debate_topic }}',
+                debate_transcript: debateContainer.innerText
+            })
+        });
+
+        const summaryData = await summaryResponse.json();
+        summaryContent.innerHTML = summaryData.summary;
+        summaryContainer.classList.remove('hidden');
+    }
+
+    // Start the debate with the first AI argument if the human is team B
+    if (humanTeam === 'B (Against)') {
+        generateAIArgument();
+    }
+</script>
+{% endblock %}
